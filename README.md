@@ -4,9 +4,11 @@ This is a modified version of [alan0ford's behavior_battery_printer.c](https://g
 
 ## What it does
 
-Type the battery percentage by triggering behaviors on the sheild's keymap.
+Type battery percentages by triggering behaviors on the shield's keymap.
 
-To report battery state of peripheral sheild, you can use combo-keys to toggle an utility layer and assign this behavior on a layer, the dongle would report the peripheral battery state in percentage by sending keycodes (e.g. '89% ') to the host.
+`&bapp` prints the battery percentage for the source that triggered the behavior.
+
+`&bapp_all` prints labeled battery percentages for the central and all peripherals whose battery level has been seen by the central, for example `C 91% P0 88% P1 84% `.
 
 ## Installation
 
@@ -40,8 +42,8 @@ Now, update your `shield.keymap` adding the behaviors.
                 base {
                         bindings = <
                               ...
-                              ...   &bapp   ...   &bapp ...
-                                  /* left */    /* right */
+                              ...   &bapp   ...   &bapp_all ...
+                                  /* source */   /* all parts */
                               ...
                         >;
                 };

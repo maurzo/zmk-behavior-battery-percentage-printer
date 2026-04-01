@@ -6,6 +6,8 @@
 
 #define DT_DRV_COMPAT zmk_behavior_battery_percentage_printer
 
+#include <string.h>
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
@@ -13,6 +15,7 @@
 #include <zmk/behavior.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/keycode_state_changed.h>
+#include <zmk/events/position_state_changed.h>
 #include <zmk/battery.h>
 #include <dt-bindings/zmk/keys.h>
 
@@ -22,8 +25,7 @@
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
-/* increased buffer to contain prefix + digits + space + percent */
-#define MAX_CHARS 32
+#define MAX_CHARS 96
 #define TYPE_DELAY_MS 10
 
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
@@ -37,8 +39,14 @@ struct behavior_battery_printer_data {
 };
 
 struct behavior_battery_printer_config {
-    /* reserved for future options */
+    bool print_all_batteries;
 };
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
+static bool peripheral_battery_seen[ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT];
+#endif
+
+static void uint_to_chars(uint32_t v, uint8_t *buffer, uint8_t *len);
 
 static inline void reset_typing_state(struct behavior_battery_printer_data *data) {
     data->current_idx = 0;
@@ -84,77 +92,92 @@ static uint32_t char_to_encoded_keycode(uint8_t ch) {
         return PERCENT;
     }
 
-    return 0;
-    // /* letters */
-    // /* map lowercase and uppercase by explicit cases to use the key macros defined
-    //  * in dt-bindings/zmk/keys.h. For uppercase, wrap with LS(...) so Shift is sent.
-    //  *
-    //  * Note: LS(...) and letter macros (A, B, C, ...) are available via keys headers.
-    //  * If for some reason LS isn't defined in your build, we can instead press/release
-    //  * an explicit SHIFT key around the letter; tell me if LS isn't available.
-    //  */
-    // bool upper = false;
-    // if (ch >= 'A' && ch <= 'Z') {
-    //     upper = true;
-    //     ch = (uint8_t)(ch - 'A' + 'a'); /* normalize to lowercase for switch */
-    // }
+#define ALPHA_CASE(lower, upper, keycode)                                                       \
+    case lower:                                                                                 \
+        return keycode;                                                                         \
+    case upper:                                                                                 \
+        return LS(keycode)
 
-    // switch (ch) {
-    // case 'a':
-    //     return upper ? LS(A) : A;
-    // case 'b':
-    //     return upper ? LS(B) : B;
-    // case 'c':
-    //     return upper ? LS(C) : C;
-    // case 'd':
-    //     return upper ? LS(D) : D;
-    // case 'e':
-    //     return upper ? LS(E) : E;
-    // case 'f':
-    //     return upper ? LS(F) : F;
-    // case 'g':
-    //     return upper ? LS(G) : G;
-    // case 'h':
-    //     return upper ? LS(H) : H;
-    // case 'i':
-    //     return upper ? LS(I) : I;
-    // case 'j':
-    //     return upper ? LS(J) : J;
-    // case 'k':
-    //     return upper ? LS(K) : K;
-    // case 'l':
-    //     return upper ? LS(L) : L;
-    // case 'm':
-    //     return upper ? LS(M) : M;
-    // case 'n':
-    //     return upper ? LS(N) : N;
-    // case 'o':
-    //     return upper ? LS(O) : O;
-    // case 'p':
-    //     return upper ? LS(P) : P;
-    // case 'q':
-    //     return upper ? LS(Q) : Q;
-    // case 'r':
-    //     return upper ? LS(R) : R;
-    // case 's':
-    //     return upper ? LS(S) : S;
-    // case 't':
-    //     return upper ? LS(T) : T;
-    // case 'u':
-    //     return upper ? LS(U) : U;
-    // case 'v':
-    //     return upper ? LS(V) : V;
-    // case 'w':
-    //     return upper ? LS(W) : W;
-    // case 'x':
-    //     return upper ? LS(X) : X;
-    // case 'y':
-    //     return upper ? LS(Y) : Y;
-    // case 'z':
-    //     return upper ? LS(Z) : Z;
-    // default:
-    //     return 0;
-    // }
+    switch (ch) {
+        ALPHA_CASE('a', 'A', A);
+        ALPHA_CASE('b', 'B', B);
+        ALPHA_CASE('c', 'C', C);
+        ALPHA_CASE('d', 'D', D);
+        ALPHA_CASE('e', 'E', E);
+        ALPHA_CASE('f', 'F', F);
+        ALPHA_CASE('g', 'G', G);
+        ALPHA_CASE('h', 'H', H);
+        ALPHA_CASE('i', 'I', I);
+        ALPHA_CASE('j', 'J', J);
+        ALPHA_CASE('k', 'K', K);
+        ALPHA_CASE('l', 'L', L);
+        ALPHA_CASE('m', 'M', M);
+        ALPHA_CASE('n', 'N', N);
+        ALPHA_CASE('o', 'O', O);
+        ALPHA_CASE('p', 'P', P);
+        ALPHA_CASE('q', 'Q', Q);
+        ALPHA_CASE('r', 'R', R);
+        ALPHA_CASE('s', 'S', S);
+        ALPHA_CASE('t', 'T', T);
+        ALPHA_CASE('u', 'U', U);
+        ALPHA_CASE('v', 'V', V);
+        ALPHA_CASE('w', 'W', W);
+        ALPHA_CASE('x', 'X', X);
+        ALPHA_CASE('y', 'Y', Y);
+        ALPHA_CASE('z', 'Z', Z);
+    default:
+        return 0;
+    }
+
+#undef ALPHA_CASE
+}
+
+static bool append_char(struct behavior_battery_printer_data *data, uint8_t ch) {
+    if (data->chars_len >= ARRAY_SIZE(data->chars)) {
+        return false;
+    }
+
+    data->chars[data->chars_len++] = ch;
+    return true;
+}
+
+static bool append_text(struct behavior_battery_printer_data *data, const char *text) {
+    while (*text != '\0') {
+        if (!append_char(data, (uint8_t)*text++)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool append_uint(struct behavior_battery_printer_data *data, uint32_t value) {
+    uint8_t digitbuf[4];
+    uint8_t digitlen = 0;
+
+    uint_to_chars(value, digitbuf, &digitlen);
+    for (uint8_t i = 0; i < digitlen; i++) {
+        if (!append_char(data, digitbuf[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool append_percent_entry(struct behavior_battery_printer_data *data, uint8_t percent) {
+    return append_uint(data, percent) && append_text(data, "% ");
+}
+
+static bool append_labeled_battery(struct behavior_battery_printer_data *data, const char *label,
+                                   uint8_t percent) {
+    return append_text(data, label) && append_char(data, ' ') && append_percent_entry(data, percent);
+}
+
+static bool append_peripheral_battery(struct behavior_battery_printer_data *data, uint8_t source,
+                                      uint8_t percent) {
+    return append_char(data, 'P') && append_uint(data, source) && append_char(data, ' ') &&
+           append_percent_entry(data, percent);
 }
 
 static void send_key(struct behavior_battery_printer_data *data) {
@@ -222,59 +245,84 @@ static void uint_to_chars(uint32_t v, uint8_t *buffer, uint8_t *len) {
     *len = t;
 }
 
-/* on_pressed: build literal "Level Bat. " + digits + " %" and type it */
+static int build_single_battery_output(struct behavior_battery_printer_data *data,
+                                       struct zmk_behavior_binding_event event) {
+    uint8_t percent = zmk_battery_state_of_charge();
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
+    if (event.source != ZMK_POSITION_STATE_CHANGE_SOURCE_LOCAL) {
+        zmk_split_central_get_peripheral_battery_level(event.source, &percent);
+    }
+#endif
+
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    LOG_INF("behavior_battery_printer: battery SOC read = %u%%", percent);
+
+    if (!append_percent_entry(data, percent)) {
+        LOG_ERR("behavior_battery_printer: buffer too small for single battery output");
+        return -ENOMEM;
+    }
+
+    return 0;
+}
+
+static int build_all_batteries_output(struct behavior_battery_printer_data *data) {
+    uint8_t percent = zmk_battery_state_of_charge();
+
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    if (!append_labeled_battery(data, "C", percent)) {
+        LOG_ERR("behavior_battery_printer: buffer too small for all battery output");
+        return -ENOMEM;
+    }
+
+#if IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
+    for (uint8_t source = 0; source < ZMK_SPLIT_CENTRAL_PERIPHERAL_COUNT; source++) {
+        if (!peripheral_battery_seen[source]) {
+            continue;
+        }
+
+        if (zmk_split_central_get_peripheral_battery_level(source, &percent) < 0) {
+            continue;
+        }
+
+        if (percent > 100) {
+            percent = 100;
+        }
+
+        if (!append_peripheral_battery(data, source, percent)) {
+            LOG_ERR("behavior_battery_printer: buffer too small for all battery output");
+            return -ENOMEM;
+        }
+    }
+#endif
+
+    return 0;
+}
+
 static int on_pressed(struct zmk_behavior_binding *binding, struct zmk_behavior_binding_event event) {
     const struct device *dev = zmk_behavior_get_binding(binding->behavior_dev);
     struct behavior_battery_printer_data *data = dev->data;
+    const struct behavior_battery_printer_config *config = dev->config;
 
     if (data->key_pressed || data->current_idx) {
         /* typing in progress, ignore */
         return ZMK_BEHAVIOR_OPAQUE;
     }
 
-    /* read battery percentage (0..100) from ZMK API */
-    uint8_t percent = zmk_battery_state_of_charge();
-
-#if IS_ENABLED(CONFIG_ZMK_SPLIT)
-#if IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
-    uint8_t source = event.source;
-    if (source != 0xFF) {
-        zmk_split_central_get_peripheral_battery_level(source, &percent);
-    }
-#endif
-#endif
-
-    if (percent > 100) percent = 100;
-
-    LOG_INF("behavior_battery_printer: battery SOC read = %u%%", percent);
-
     reset_typing_state(data);
 
-    /* prefix exactly as requested (capital L and B) */
-    // const char *prefix = "Level Bat. ";
-    // size_t p = strlen(prefix);
-
-    // /* ensure buffer fits */
-    // if (p + 4 + 3 >= ARRAY_SIZE(data->chars)) { /* prefix + up to 3 digits + space + percent */
-    //     LOG_ERR("behavior_battery_printer: buffer too small for prefix");
-    //     return ZMK_BEHAVIOR_OPAQUE;
-    // }
-
-    // /* copy prefix */
-    // memcpy(data->chars, prefix, p);
-    // data->chars_len = p;
-
-    /* append digits of percent */
-    uint8_t digitbuf[4];
-    uint8_t digitlen = 0;
-    uint_to_chars(percent, digitbuf, &digitlen);
-    for (int i = 0; i < digitlen; i++) {
-        data->chars[data->chars_len++] = digitbuf[i];
+    int err = config->print_all_batteries ? build_all_batteries_output(data)
+                                          : build_single_battery_output(data, event);
+    if (err < 0) {
+        reset_typing_state(data);
+        return ZMK_BEHAVIOR_OPAQUE;
     }
-
-    /* append space and percent sign */
-    data->chars[data->chars_len++] = '%';
-    data->chars[data->chars_len++] = ' ';
 
     /* start typing */
     data->current_idx = 0;
@@ -294,7 +342,9 @@ static const struct behavior_driver_api behavior_battery_printer_api = {
 
 #define BAT_INST(idx) \
     static struct behavior_battery_printer_data behavior_battery_printer_data_##idx; \
-    static const struct behavior_battery_printer_config behavior_battery_printer_config_##idx = {}; \
+    static const struct behavior_battery_printer_config behavior_battery_printer_config_##idx = { \
+        .print_all_batteries = DT_INST_PROP(idx, print_all_batteries), \
+    }; \
     BEHAVIOR_DT_INST_DEFINE(idx, behavior_battery_printer_init, NULL, \
                             &behavior_battery_printer_data_##idx, \
                             &behavior_battery_printer_config_##idx, \
@@ -312,6 +362,9 @@ static int bapp_peripheral_batt_lvl_listener(const zmk_event_t *eh) {
         as_zmk_peripheral_battery_state_changed(eh);
     if (ev == NULL) {
         return ZMK_EV_EVENT_BUBBLE;
+    }
+    if (ev->source < ARRAY_SIZE(peripheral_battery_seen)) {
+        peripheral_battery_seen[ev->source] = true;
     }
     LOG_DBG("batt_lvl_ev soruce: %d state_of_charge: %d", ev->source, ev->state_of_charge);
     return ZMK_EV_EVENT_BUBBLE;

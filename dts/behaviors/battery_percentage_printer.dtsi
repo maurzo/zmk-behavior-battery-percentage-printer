@@ -5,5 +5,12 @@
                 label = "BATTERY_PERCENTAGE_PRINTER";
                 #binding-cells = <0>;
         };
+
+        /omit-if-no-ref/ bapp_all: battery_percentage_printer_all {
+                compatible = "zmk,behavior-battery-percentage-printer";
+                label = "BATTERY_PERCENTAGE_PRINTER_ALL";
+                print-all-batteries;
+                #binding-cells = <0>;
+        };
     };
 };

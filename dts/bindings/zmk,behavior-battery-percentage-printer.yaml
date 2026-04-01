@@ -5,3 +5,8 @@ description: "Behavior that types the battery percentage."
 compatible: "zmk,behavior-battery-percentage-printer"
 
 include: zero_param.yaml
+
+properties:
+  print-all-batteries:
+    type: boolean
+    description: Print labeled battery levels for the central and all known peripherals.
