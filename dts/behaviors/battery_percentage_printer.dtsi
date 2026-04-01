@@ -12,5 +12,13 @@
                 print-all-batteries;
                 #binding-cells = <0>;
         };
+
+        /omit-if-no-ref/ bapp_periph: battery_percentage_printer_periph {
+                compatible = "zmk,behavior-battery-percentage-printer";
+                label = "BATTERY_PERCENTAGE_PRINTER_PERIPH";
+                print-all-batteries;
+                omit-central-battery;
+                #binding-cells = <0>;
+        };
     };
 };

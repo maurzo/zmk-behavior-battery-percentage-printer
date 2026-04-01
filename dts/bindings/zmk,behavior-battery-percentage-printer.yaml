@@ -10,3 +10,6 @@ properties:
   print-all-batteries:
     type: boolean
     description: Print labeled battery levels for the central and all known peripherals.
+  omit-central-battery:
+    type: boolean
+    description: Omit the central battery entry when printing all battery levels.

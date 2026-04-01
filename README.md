@@ -10,6 +10,8 @@ Type battery percentages by triggering behaviors on the shield's keymap.
 
 `&bapp_all` prints labeled battery percentages for the central and all peripherals whose battery level has been seen by the central, for example `C 91% P0 88% P1 84% `.
 
+`&bapp_periph` prints labeled battery percentages for peripherals only, for example `P0 88% P1 84% `.
+
 ## Installation
 
 Include this project on your ZMK's west manifest in `config/west.yml`:
@@ -42,8 +44,8 @@ Now, update your `shield.keymap` adding the behaviors.
                 base {
                         bindings = <
                               ...
-                              ...   &bapp   ...   &bapp_all ...
-                                  /* source */   /* all parts */
+                              ...   &bapp   ...   &bapp_all ...   &bapp_periph
+                                  /* source */   /* all parts */   /* peripherals */
                               ...
                         >;
                 };

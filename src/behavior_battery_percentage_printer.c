@@ -40,6 +40,7 @@ struct behavior_battery_printer_data {
 
 struct behavior_battery_printer_config {
     bool print_all_batteries;
+    bool omit_central_battery;
 };
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
@@ -269,16 +270,22 @@ static int build_single_battery_output(struct behavior_battery_printer_data *dat
     return 0;
 }
 
-static int build_all_batteries_output(struct behavior_battery_printer_data *data) {
+static int build_all_batteries_output(struct behavior_battery_printer_data *data,
+                                      const struct behavior_battery_printer_config *config) {
     uint8_t percent = zmk_battery_state_of_charge();
+    bool has_output = false;
 
     if (percent > 100) {
         percent = 100;
     }
 
-    if (!append_labeled_battery(data, "C", percent)) {
-        LOG_ERR("behavior_battery_printer: buffer too small for all battery output");
-        return -ENOMEM;
+    if (!config->omit_central_battery) {
+        if (!append_labeled_battery(data, "C", percent)) {
+            LOG_ERR("behavior_battery_printer: buffer too small for all battery output");
+            return -ENOMEM;
+        }
+
+        has_output = true;
     }
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT) && IS_ENABLED(CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING)
@@ -299,8 +306,17 @@ static int build_all_batteries_output(struct behavior_battery_printer_data *data
             LOG_ERR("behavior_battery_printer: buffer too small for all battery output");
             return -ENOMEM;
         }
+
+        has_output = true;
     }
 #endif
+
+    if (!has_output) {
+        if (!append_text(data, "NO DATA ")) {
+            LOG_ERR("behavior_battery_printer: buffer too small for fallback output");
+            return -ENOMEM;
+        }
+    }
 
     return 0;
 }
@@ -317,7 +333,7 @@ static int on_pressed(struct zmk_behavior_binding *binding, struct zmk_behavior_
 
     reset_typing_state(data);
 
-    int err = config->print_all_batteries ? build_all_batteries_output(data)
+    int err = config->print_all_batteries ? build_all_batteries_output(data, config)
                                           : build_single_battery_output(data, event);
     if (err < 0) {
         reset_typing_state(data);
@@ -344,6 +360,7 @@ static const struct behavior_driver_api behavior_battery_printer_api = {
     static struct behavior_battery_printer_data behavior_battery_printer_data_##idx; \
     static const struct behavior_battery_printer_config behavior_battery_printer_config_##idx = { \
         .print_all_batteries = DT_INST_PROP(idx, print_all_batteries), \
+        .omit_central_battery = DT_INST_PROP(idx, omit_central_battery), \
     }; \
     BEHAVIOR_DT_INST_DEFINE(idx, behavior_battery_printer_init, NULL, \
                             &behavior_battery_printer_data_##idx, \
