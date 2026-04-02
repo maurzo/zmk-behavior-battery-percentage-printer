@@ -19,11 +19,11 @@ Include this project on your ZMK's west manifest in `config/west.yml`:
 ```diff
   [...]
   remotes:
-+    - name: badjeff
-+      url-base: https://github.com/badjeff
++    - name: maurzo
++      url-base: https://github.com/maurzo
   projects:
 +    - name: zmk-behavior-battery-percentage-printer
-+      remote: badjeff
++      remote: maurzo
 +      revision: main
   [...]
 ```
